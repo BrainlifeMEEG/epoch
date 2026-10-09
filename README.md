@@ -1,93 +1,96 @@
-# app-epoch
+# Epochs from events
 
-Brainlife App to create epochs from raw MEG/EEG data based on events using MNE-Python's [mne.Epochs](https://mne.tools/stable/generated/mne.Epochs.html) function.
+[![Run on Brainlife.io](https://img.shields.io/badge/Brainlife-bl.app.613-blue.svg)](https://doi.org/10.25663/brainlife.app.613)
 
 ## Description
 
-This app extracts epochs (time-locked segments) from raw MEG/EEG data based on event markers recorded in stimulus channels or event files. It supports complex event mapping with metadata creation for analyzing behavioral responses alongside brain data.
+This app extracts epochs (time-locked segments) from raw MEG/EEG data around event markers, using MNE-Python's [`mne.Epochs`](https://mne.tools/stable/generated/mne.Epochs.html). Events are read from a provided `events.tsv` input if available; otherwise they are detected from a stimulus channel with [`mne.find_events`](https://mne.tools/stable/generated/mne.find_events.html) or, if no stimulus channel is given either, from annotations with [`mne.events_from_annotations`](https://mne.tools/stable/generated/mne.events_from_annotations.html). Event codes are mapped to condition labels through `event_id_condition_mapping`, and the app can optionally build per-trial metadata with [`mne.epochs.make_metadata`](https://mne.tools/stable/generated/mne.epochs.make_metadata.html) to assess whether a behavioral response matched the expected target.
+
+The app generates:
+- Epoched MEG/EEG data (`mne.Epochs`)
+- An HTML report with epoch statistics and visualizations
+- A plot of the epochs
+- `product.json` Brainlife.io metadata, including the epochs plot image
 
 ## Inputs
 
-- **raw.fif**: Raw MEG/EEG data file in MNE format
-- **event.tsv** (optional): Events file. If not provided, events are detected from the stimulus channel specified in configuration
+- **`raw`** (`neuro/meeg/mne/raw`): continuous MEG/EEG data to epoch (required)
+- **`events`** (`neuro/meg/fif-override`, tag `events`): BIDS-style `events.tsv` with `sample`/`value` columns (optional). If not provided, events are detected from `stim_channel` or, if that is also unset, from annotations in the raw data.
 
 ## Outputs
 
-- **epo.fif**: Epoched data in MNE format
-- **report.html**: HTML report with epoch statistics and visualizations
-- **product.json**: Brainlife.io product metadata including visualization images
+- **`out_dir/meg-epo.fif`** (`neuro/meeg/mne/epochs`): epoched data
+- **`out_report/report.html`** (`report/html`): HTML report with epoch visualization and, if `assess_correctness` is enabled, response-correctness counts
+- **`out_figs/epochs_plot.png`** (`generic/image/png`): image plot of the epochs (global field power), also embedded in `product.json`
 
 ## Configuration Parameters
 
-### Required
-- **stim_channel** (string): Name of the stimulus channel (e.g., "STI 014")
-- **tmin** (float): Start time of epoch in seconds relative to event (e.g., -0.5)
-- **tmax** (float): End time of epoch in seconds relative to event (e.g., 1.1)
-- **event_id_condition_mapping** (string): Event ID mappings (see format below)
-
-### Optional
-- **events** (string): Path to events file. If not provided, events are detected from stim_channel
-- **assess_correctness** (boolean): If true, assess response correctness based on stimulus-response mapping (default: false)
-- **use_correct** (boolean): If true, keep only correct response epochs (requires assess_correctness=true)
-- **metadata_tmin** (float): Start time for metadata creation (often same as tmin)
-- **metadata_tmax** (float): End time for metadata creation (often same as tmax)
-- **param_eeg**, **param_meg**, **param_eog**, **param_ecg**, **param_emg**, **param_stim** (boolean): Channel types to include
+| key | type | default | description |
+|---|---|---|---|
+| `event_id_condition_mapping` | string | required | Mapping from numeric event codes to condition labels, formatted `type/label[/category]-ID`, comma-separated (e.g. `stimulus/auditory/left-1,stimulus/visual/right-2,response/left-3,response/right-4`). Parsed into the `event_id` dict passed to `mne.Epochs()`. |
+| `tmin` | float | required | Start of the epoch relative to each event, in seconds (passed to `mne.Epochs(tmin=...)`, e.g. `-0.5`). |
+| `tmax` | float | required | End of the epoch relative to each event, in seconds (passed to `mne.Epochs(tmax=...)`, e.g. `1.1`). |
+| `picks` | string | `"all"` | Channels to include, passed to `mne.Epochs(picks=...)`. `"all"` or `"data"` pick all/data channels; a comma-separated list of channel types or names picks only those; empty/unset is treated as `"all"`. |
+| `stim_channel` | string | `""` | Name of the stimulus channel to detect events from with `mne.find_events()` (e.g. `"STI101"`). Only used when the `events` input is not provided; if also empty, events are instead taken from annotations in the raw data via `mne.events_from_annotations()`. |
+| `assess_correctness` | boolean | `false` | If `true`, build trial metadata with `mne.epochs.make_metadata()` and add a `<event2kw>_correct` column recording whether each response matched the expected target. Requires `metadata_tmin`/`metadata_tmax`. |
+| `use_correct` | boolean | `false` | If `true` (and `assess_correctness` is also `true`), keep only epochs whose response was correct. |
+| `metadata_tmin` | float | required if `assess_correctness` is `true` | Start of the window (relative to each event) used by `mne.epochs.make_metadata()` to build trial metadata; may differ from `tmin`. |
+| `metadata_tmax` | float | required if `assess_correctness` is `true` | End of the window (relative to each event) used by `mne.epochs.make_metadata()` to build trial metadata; may differ from `tmax`. |
+| `event1kw` | string | `"stimulus"` (required) | Hierarchical Event Descriptor (HED) keyword identifying "event 1" (e.g. the stimulus) labels in `event_id_condition_mapping`; used to build metadata and assess correctness. |
+| `event2kw` | string | `"response"` (required) | HED keyword identifying "event 2" (e.g. the response) labels in `event_id_condition_mapping`; used to build metadata and assess correctness. |
+| `baseline` | string | `""` | Baseline correction window passed to `mne.Epochs(baseline=...)`: a `"(a, b)"` string (`none`/`tmin`/`tmax` allowed for either bound), `"none"` for no correction, or empty for MNE's default `(None, 0)`. |
 
 ### Event ID Condition Mapping Format
 
-Format: `type/label/category-ID,type/label/category-ID,...`
+Format: `type/label[/category]-ID`, comma-separated.
 
 **Examples:**
 - Simple: `stimulus/auditory-1,stimulus/visual-2,response/left-3,response/right-4`
-- With targets: `stimulus/D_REA/target_right-13,stimulus/REA_D/target_left-14,response/left-25,response/right-26`
-
-**Components:**
-- **type**: Event type (e.g., "stimulus", "response")
-- **label**: Descriptive label (can include subcategories like D_REA)
-- **category** (for assess_correctness): Target or response category (e.g., "target_left", "target_right")
-- **ID**: Numeric event code
+- With targets (for `assess_correctness`): `stimulus/D_REA/target_right-13,stimulus/REA_D/target_left-14,response/left-25,response/right-26`
 
 ## Usage
 
-Configuration file example:
-```json
-{
-    "fif": "meg/raw.fif",
-    "stim_channel": "STI 014",
-    "tmin": -0.5,
-    "tmax": 1.1,
-    "metadata_tmin": -0.5,
-    "metadata_tmax": 1.1,
-    "event_id_condition_mapping": "stimulus/auditory/left-1,stimulus/visual/right-2,response/left-3,response/right-4",
-    "assess_correctness": true,
-    "use_correct": true
-}
+### Running on Brainlife.io
+
+1. Select your raw MEG/EEG dataset as the `raw` input, and optionally an `events.tsv` as the `events` input.
+2. Set `event_id_condition_mapping`, `tmin`, `tmax`, and the other configuration parameters as needed.
+3. Submit the process.
+4. Review the epochs plot and HTML report in the output viewer.
+
+### Local Testing
+
+```bash
+# Edit config.json to point "raw" (and optionally "events") at real files, then:
+python main.py
 ```
 
 ## Technical Details
 
 ### Event Detection and Metadata
-- Events are automatically detected from stimulus channels or read from event files
-- Metadata is created using MNE's [make_metadata](https://mne.tools/stable/generated/mne.epochs.make_metadata.html) function
-- Behavioral responses can be aligned with stimulus information for accuracy analysis
+- Events are read from an `events.tsv` input if provided, otherwise detected from a stimulus channel or from annotations in the raw data.
+- Metadata is created using MNE's [`make_metadata`](https://mne.tools/stable/generated/mne.epochs.make_metadata.html) function, only when `assess_correctness` is enabled.
+- Behavioral responses can be aligned with stimulus information for accuracy analysis.
 
 ### Response Correctness Assessment
 When `assess_correctness` is enabled:
-1. Stimulus and response events are mapped to target categories
-2. Response correctness is determined by matching response type with stimulus target
-3. A `response_correct` column is added to epoch metadata
-4. If `use_correct` is true, only correct-response epochs are kept
+1. Stimulus and response events are mapped to target categories.
+2. Response correctness is determined by matching response type with stimulus target.
+3. A `<event2kw>_correct` column is added to epoch metadata.
+4. If `use_correct` is `true`, only correct-response epochs are kept.
 
 ### Output Report
 The HTML report includes:
-- Epoch statistics (total count)
-- Correct/incorrect response counts (if assess_correctness enabled)
-- Epochs visualization showing brain activity across trials
-- Channels information
+- An interactive display of the epochs
+- Correct/incorrect response counts, if `assess_correctness` is enabled
 
 ## Authors
-- [Kami Salibayeva](https://github.com/KSalibay)
-- [Maximilien Chaumon](https://github.com/dnacombo), Paris Brain Institute
+- Kami Salibayeva (https://github.com/KSalibay)
+- Maximilien Chaumon (https://github.com/dnacombo), Paris Brain Institute
+
+## Citations
+
+- Hayashi, S., Caron, B.A., Heinsfeld, A.S. et al. brainlife.io: a decentralized and open-source cloud platform to support neuroscience research. Nat Methods 21, 809–813 (2024). https://doi.org/10.1038/s41592-024-02237-2
+- Gramfort, A. et al. MEG and EEG data analysis with MNE-Python. Front. Neurosci. 7, 267 (2013). https://doi.org/10.3389/fnins.2013.00267
 
 ## Funding Acknowledgement
 
@@ -98,12 +101,8 @@ brainlife.io is publicly funded and for the sustainability of the project it is 
 [![NSF-ACI-1916518](https://img.shields.io/badge/NSF_ACI-1916518-blue.svg)](https://nsf.gov/awardsearch/showAward?AWD_ID=1916518)
 [![NSF-IIS-1912270](https://img.shields.io/badge/NSF_IIS-1912270-blue.svg)](https://nsf.gov/awardsearch/showAward?AWD_ID=1912270)
 [![NIH-NIBIB-R01EB029272](https://img.shields.io/badge/NIH_NIBIB-R01EB029272-green.svg)](https://grantome.com/grant/NIH/R01-EB029272-01)
+[![NIH-NIBIB-R01EB030896](https://img.shields.io/badge/NIH_NIBIB-R01EB030896-green.svg)](https://grantome.com/grant/NIH/R01-EB030896-01)
 
-## Citations
+## License
 
-1. Avesani, P., McPherson, B., Hayashi, S. et al. The open diffusion data derivatives, brain data upcycling via integrated publishing of derivatives and reproducible open cloud services. Sci Data 6, 69 (2019). [https://doi.org/10.1038/s41597-019-0073-y](https://doi.org/10.1038/s41597-019-0073-y)
-2. Gramfort, A., Luessi, M., Larson, E., et al. MEG and EEG data analysis with MNE-Python. Front. Neurosci. 7, 267 (2013). [https://doi.org/10.3389/fnins.2013.00267](https://doi.org/10.3389/fnins.2013.00267)
-
-## Citation
-
-Hayashi, S., Caron, B.A., Heinsfeld, A.S. et al. brainlife.io: a decentralized and open-source cloud platform to support neuroscience research. Nat Methods 21, 809–813 (2024). https://doi.org/10.1038/s41592-024-02237-2
+Copyright (c) 2026 MEEG Brainlife team. Licensed under AGPL-3.0, see [license.txt](license.txt).
