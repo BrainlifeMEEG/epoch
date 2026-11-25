@@ -1,5 +1,59 @@
 # Epochs from events
 
+<!-- brainlife-app:begin (generated from the App manifest; edit the manifest, not this block) -->
+
+> **Extracts epochs around events from continuous MEG/EEG data with MNE-Python mne.Epochs and outputs an epochs .fif file, an epochs plot and an HTML report.**
+
+Reads events from a BIDS-style events.tsv, or detects them on stim_channel or from annotations, maps event codes to condition labels and cuts epochs from tmin to tmax with optional baseline correction. Optionally builds trial metadata to label correct responses (assess_correctness) and keep only correct trials (use_correct). Use it after filtering/cleaning raw MEG/EEG and before averaging or decoding.
+
+| | |
+|---|---|
+| 📥 **Inputs** | `neuro/meeg/mne/raw` · `neuro/meg/fif-override` (optional) |
+| 📤 **Outputs** | `neuro/meeg/mne/epochs` · `report/html` |
+| 🐳 **Container** | `brainlifemeeg/mne:1.12.1` |
+| ⚙️ **Resources** | 1 CPUs · 20 GB memory · 1.5 h walltime |
+| 🔗 **Run it** | [doi.org/10.25663/brainlife.app.613](https://doi.org/10.25663/brainlife.app.613) |
+
+#### 📥 Inputs
+
+| Input | Datatype | Required | Description |
+|---|---|---|---|
+| `raw` | `neuro/meeg/mne/raw` | yes | Continuous MEG/EEG data in MNE raw .fif format. |
+| `events` | `neuro/meg/fif-override` (events) | no | Optional BIDS-style events.tsv with sample and value columns; if absent, events are taken from stim_channel or, failing that, from annotations. |
+
+#### 📤 Outputs
+
+| Output | Datatype | Description |
+|---|---|---|
+| `out_dir` | `neuro/meeg/mne/epochs` | MNE epochs fif file |
+| `out_report` | `report/html` | MNE HTML report |
+
+<details>
+<summary><b>⚙️ Parameters</b> (12)</summary>
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `event_id_condition_mapping` | string |  | Time-locking events, labels, and correctness mapping. Create a mapping between event IDs (1,2,3..., as coded in 'STI 014' or other stimulus aggregate channel) and desired labels (e.g. 'auditory', 'visual', or any other stimulus names that make sense in your design). The mapping should be formatted with dashes (-) between a desired label and the ID code and commas (,) between list entries like so: auditory-1,visual-2, etc. If "assess_correctness" option is toggled, you need to provide additional information about your conditions (event 1) and the correct response (event 2), as well as responses and their types. The information should be formatted as follows: event1/desired_label/(event2)-event_ID Example: stimulus/auditory/left-1: auditory stimulus coded with trigger 1 is supposed to be followed by left stimulus/visual/right-2: visual stimulus coded with trigger 2 is supposed to be followed by right response/left-3: left response coded with trigger 3 response/right-4: right response coded with trigger 4 Several mappings may be separated by commas (,). e.g. stimulus/auditory/left-1, stimulus/visual/right-2, response/left-3:, response/right-4 |
+| `tmin` | number | `-0.2` | The time relative to each event at which to start epoch (in seconds). |
+| `tmax` | number | `0.5` | The time relative to each event at which to end each epoch (in seconds). |
+| `picks` | string | `all` | Channels to include. Slices and lists of integers will be interpreted as channel indices. In lists, channel type strings (e.g., ['meg', 'eeg']) will pick channels of those types, channel name strings (e.g., ['MEG0111', 'MEG2623'] will pick the given channels. Can also be the string values 'all' to pick all channels, or 'data' to pick data channels. None (default) will pick all channels. Note that channels in info['bads'] will be included if their names or indices are explicitly provided. default: 'all' |
+| `stim_channel` | string |  | A stim_channel should be present in the data if no events.tsv file is provided as input. |
+| `assess_correctness` | boolean | `true` | Assess the number of epochs with correct responses (task-based studies). Dependent upon "event_id_condition_mapping" — need to have stimuli and responses mapped correctly |
+| `use_correct` | boolean | `false` | Toggle if want to use only epochs where the participant responded correctly |
+| `metadata_tmin` | number | `-0.5` | The startpoint for the epoch in assessing correctness of the response in a trial — can be different from tmin (that is used to actually slice the epochs). |
+| `metadata_tmax` | number | `1.1` | The endpoint for the epoch in assessing correctness of the response in a trial — can be different from tmax (that is used to actually slice the epochs). |
+| `event1kw` | string | `stimulus` | Event 1 Hierarchical Event Descriptor (HED) keyword (e.g. stimulus). This HED is used to define conditions for epochs. |
+| `event2kw` | string | `response` | Event 2 Hierarchical Event Descriptor (HED) keyword (e.g. response). This HED is used to define correct/incorrect epochs. |
+| `baseline` | string |  | The time interval to consider as “baseline” when applying baseline correction. If None, do not apply baseline correction. If a tuple (a, b), the interval is between a and b (in seconds), including the endpoints. If a is None, the beginning of the data is used; and if b is None, it is set to the end of the data. If (None, None), the entire time interval is used. |
+
+</details>
+
+📚 **References used by this App:**
+- Hayashi S, Caron BA, Heinsfeld AS, et al. brainlife.io: a decentralized and open-source cloud platform to support neuroscience research. Nat Methods 21:809-813 (2024). [doi:10.1038/s41592-024-02237-2](https://doi.org/10.1038/s41592-024-02237-2)
+- Gramfort A, et al. MEG and EEG data analysis with MNE-Python. Front Neurosci 7:267 (2013). [doi:10.3389/fnins.2013.00267](https://doi.org/10.3389/fnins.2013.00267)
+
+<!-- brainlife-app:end -->
+
 [![Run on Brainlife.io](https://img.shields.io/badge/Brainlife-bl.app.613-blue.svg)](https://doi.org/10.25663/brainlife.app.613)
 
 ## Description
